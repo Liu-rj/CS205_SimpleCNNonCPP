@@ -1,5 +1,3 @@
-#pragma GCC optimize(3,"Ofast","inline")
-
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include "facedetection.h"
@@ -11,7 +9,7 @@ using namespace chrono;
 
 int main()
 {
-	Mat m = imread("./pics/bg.jpg");
+	Mat m = imread("./pics/kid.jpg");
 	Mat image;
 	m.convertTo(image, CV_32FC3);
 	float* img = convertRGB(image);

@@ -46,57 +46,6 @@ float* convertRGB(Mat img)
 	return convert;
 }
 
-//float* ConvBNReLU(float* img, int rows, int cols, int channels, conv_param& cp)
-//{
-//	int convrows = (rows - cp.kernel_size + 2 * cp.pad) / cp.stride + 1; // output row num
-//	int convcols = (cols - cp.kernel_size + 2 * cp.pad) / cp.stride + 1; // output column num
-//	int size = convrows * convcols * cp.out_channels;
-//	float* conv = new float[size] {};
-//	int initialrow, endrow, initialcol, endcol;
-//	for (int i = 0; i < cp.kernel_size; ++i)
-//	{
-//		int a = ((i + 1) % cp.kernel_size) - cp.pad; // initial scan row
-//		int b = ((i + 1) / cp.kernel_size) - cp.pad; // initial scan col
-//		int index_kernel = i * cp.in_channels;
-//		int index_conv = 0;
-//		if (a <= 0)
-//		{
-//			initialrow = 0;
-//			endrow = rows + a - 1;
-//			index_conv -= a * convcols; // 相对行距离*列数
-//		}
-//		else
-//		{
-//			initialrow = a - 1;
-//			endrow = rows;
-//		}
-//		if (b <= 0)
-//		{
-//			initialcol = 0;
-//			endcol = cols + b - 1;
-//			index_conv -= (b - 1); // 相对距离加列的第几个
-//		}
-//		else
-//		{
-//			initialcol = b - 1;
-//			endcol = cols;
-//		}
-//		for (int j = initialcol; j < endcol; j++) // 每一列
-//		{
-//			int index = j * channels * cols + initialrow;
-//			index_conv += convcols;
-//			for (int k = 0; k < endrow - initialrow; k++) // 每一行
-//			{
-//				for (int l = 0; l < channels; l++)
-//				{
-//					conv[index_conv++] += cp.p_weight[index_kernel] * img[index++];
-//				}
-//			}
-//		}
-//	}
-//	return conv;
-//}
-
 // paddling operation
 float* paddling(float* img, int newrows, int newcols, int channels, int pad)
 {
