@@ -2,6 +2,8 @@
 #include <opencv2/opencv.hpp>
 #include "facedetection.h"
 #include <math.h>
+#include "gemm.h"
+#include <cblas.h>
 
 using namespace cv;
 using namespace std;
@@ -30,20 +32,27 @@ fc_param fc_params[1] = { // in_feature, out_feature, weight, bias
 
 float* convertRGB(Mat img)
 {
-	float* convert = new float[img.rows * img.cols * img.channels()];
-	int size = img.rows * img.cols;
-	int index = -1;
-	for (int i = 0; i < img.rows; i++)
+	if (img.channels() != 3)
 	{
-		float* p = img.ptr<float>(i);
-		for (int j = 0; j < img.cols * img.channels(); j += 3)
-		{
-			convert[++index] = p[j + 2] / 255;
-			convert[index + size] = p[j + 1] / 255;
-			convert[index + 2 * size] = p[j] / 255;
-		}
+		throw "Wrong Input Image Channel!";
 	}
-	return convert;
+	else
+	{
+		float* convert = new float[img.rows * img.cols * img.channels()];
+		int size = img.rows * img.cols;
+		int index = -1;
+		for (int i = 0; i < img.rows; i++)
+		{
+			float* p = img.ptr<float>(i);
+			for (int j = 0; j < img.cols * img.channels(); j += 3)
+			{
+				convert[++index] = p[j + 2] / 255;
+				convert[index + size] = p[j + 1] / 255;
+				convert[index + 2 * size] = p[j] / 255;
+			}
+		}
+		return convert;
+	}
 }
 
 // paddling operation
@@ -87,8 +96,8 @@ float* paddling(float* img, int newrows, int newcols, int channels, int pad)
 	}
 }
 
-// im2col algorithm
-float* im2col(float* newimg, int newrows, int newcols, int convrows, int convcols, int channels, int kernel_size, int stride)
+// im2col algorithm flatten by plane RRRGGGBBB
+float* im2col_plane(float* newimg, int newrows, int newcols, int convrows, int convcols, int channels, int kernel_size, int stride)
 {
 	int newsize = newrows * newcols;
 	float* result = new float[kernel_size * kernel_size * convrows * convcols * channels];
@@ -116,22 +125,48 @@ float* im2col(float* newimg, int newrows, int newcols, int convrows, int convcol
 	return result;
 }
 
+// im2col algorithm flatten by channel RGBRGBRGB
+float* im2col_channel(float* newimg, int newrows, int newcols, int convrows, int convcols, int channels, int kernel_size, int stride)
+{
+	int newsize = newrows * newcols;
+	float* result = new float[kernel_size * kernel_size * convrows * convcols * channels];
+	int index = -1, position = -1;
+	for (int i = 0; i < convrows; i++)
+	{
+		for (int j = 0; j < convcols; j++)
+		{
+			int colp = position + j * stride; // column initial position
+			for (int g = 0; g < channels; g++)
+			{
+				int kp = colp + g * newsize;
+				for (int k = 0; k < kernel_size; k++) // rows
+				{
+					for (int l = 0; l < kernel_size; l++) // cols
+					{
+						result[++index] = newimg[++kp];
+					}
+					kp += newcols - kernel_size; // column position
+				}
+			}
+		}
+		position += newcols * stride; // rows position
+	}
+	return result;
+}
+
+// convolution & BN & Relu
 float* ConvBNReLU(float* img, int rows, int cols, int channels, conv_param& cp)
 {
 	int convrows = (rows - cp.kernel_size + 2 * cp.pad) / cp.stride + 1; // rows after convolution
 	int convcols = (cols - cp.kernel_size + 2 * cp.pad) / cp.stride + 1; // columns after convolution
-	int size = convrows * convcols * cp.out_channels; // size after convolution
-	int newrows = rows + 2 * cp.pad; // rows after paddling
-	int newcols = cols + 2 * cp.pad; // cols after paddling
 	int kerneltimes = convrows * convcols;
 	int kernelsize = cp.kernel_size * cp.kernel_size;
-	float* newimg = paddling(img, newrows, newcols, channels, cp.pad);
-	float* imgcol = im2col(newimg, newrows, newcols, convrows, convcols, channels, cp.kernel_size, cp.stride);
+	float* newimg = paddling(img, rows + 2 * cp.pad, cols + 2 * cp.pad, channels, cp.pad);
+	float* imgcol = im2col_plane(newimg, rows + 2 * cp.pad, cols + 2 * cp.pad, convrows, convcols, channels, cp.kernel_size, cp.stride);
 	delete[] newimg;
-	float* conv = new float[size] {};
+	float* conv = new float[kerneltimes * cp.out_channels] {}; // size after convolution 64 * 64 * 16
 	int key = -1, index = -1, kernelindex = 0;
-
-	// convolution & BN
+	
 	for (int i = 0; i < cp.out_channels; i++)
 	{
 		for (int j = 0; j < cp.in_channels; j++)
@@ -168,6 +203,46 @@ float* ConvBNReLU(float* img, int rows, int cols, int channels, conv_param& cp)
 	return conv;
 }
 
+// convolution & BN & Relu
+float* ConvBNReLU_gemm(float* img, int rows, int cols, int channels, conv_param& cp)
+{
+	int convrows = (rows - cp.kernel_size + 2 * cp.pad) / cp.stride + 1; // rows after convolution
+	int convcols = (cols - cp.kernel_size + 2 * cp.pad) / cp.stride + 1; // columns after convolution
+	int kerneltimes = convrows * convcols;
+	int kernelsize = cp.kernel_size * cp.kernel_size;
+	float* newimg = paddling(img, rows + 2 * cp.pad, cols + 2 * cp.pad, channels, cp.pad);
+	float* imgcol = im2col_channel(newimg, rows + 2 * cp.pad, cols + 2 * cp.pad, convrows, convcols, channels, cp.kernel_size, cp.stride);
+	delete[] newimg;
+	float* convtemp = new float[kerneltimes * cp.out_channels]{}; // size after convolution 64 * 64 * 16
+	float* conv = new float[kerneltimes * cp.out_channels]{};
+	float* rvkernel = new float[kernelsize * cp.out_channels * cp.in_channels]; // transposition of kernel
+
+	transpose(rvkernel, cp.p_weight, cp.out_channels, kernelsize * cp.in_channels);
+	//m_product_row(convtemp, imgcol, rvkernel, kerneltimes, channels * kernelsize, cp.out_channels);
+	cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, kerneltimes, cp.out_channels, channels * kernelsize, 1, imgcol, channels * kernelsize, rvkernel, cp.out_channels, 0, convtemp, cp.out_channels);
+	
+	transpose(conv, convtemp, kerneltimes, cp.out_channels);
+
+	// Relu
+	int index = -1;
+	for (int i = 0; i < cp.out_channels; ++i)
+	{
+		for (int j = 0; j < kerneltimes; ++j)
+		{
+			conv[++index] += cp.p_bias[i];
+			if (conv[index] < 0)
+			{
+				conv[index] = 0;
+			}
+		}
+	}
+
+	delete[] imgcol;
+	delete[] rvkernel;
+	delete[] convtemp;
+	return conv;
+}
+
 float* MaxPooling(float* img, int convrows, int convcols, int channels)
 {
 	int size = convcols * convrows;
@@ -192,14 +267,13 @@ float* MaxPooling(float* img, int convrows, int convcols, int channels)
 
 float* FullConnect(float* img, int rows, int cols, int channels, fc_param& fc)
 {
-	float* fcl = new float[fc.out_features]{};
 	if (fc.in_features != rows * cols * channels)
 	{
-		throw "Wrong FullConnect Input!";
-		exit(0);
+		throw "Wrong Input Image Size!";
 	}
 	else
 	{
+		float* fcl = new float[fc.out_features]{};
 		int index_img = -1, index_fc = -1;
 		for (int i = 0; i < fc.out_features; i++)
 		{
@@ -210,8 +284,8 @@ float* FullConnect(float* img, int rows, int cols, int channels, fc_param& fc)
 			fcl[i] += fc.p_bias[i];
 			index_img = -1;
 		}
+		return fcl;
 	}
-	return fcl;
 }
 
 void SoftMax(float* fcl, int size)
@@ -229,14 +303,14 @@ void SoftMax(float* fcl, int size)
 
 float* cnn(float* img, int rows, int cols, int channels)
 {
-	float* conv1 = ConvBNReLU(img, rows, cols, channels, conv_params[0]);
+	float* conv1 = ConvBNReLU_gemm(img, rows, cols, channels, conv_params[0]);
 	int rows_conv1 = (rows - conv_params[0].kernel_size + 2 * conv_params[0].pad) / conv_params[0].stride + 1;
 	int cols_conv1 = (cols - conv_params[0].kernel_size + 2 * conv_params[0].pad) / conv_params[0].stride + 1;
 	float* maxp1 = MaxPooling(conv1, rows_conv1, cols_conv1, conv_params[0].out_channels);
 	delete[] conv1;
 	int rows_maxp1 = rows_conv1 / 2;
 	int cols_maxp1 = cols_conv1 / 2;
-	float* conv2 = ConvBNReLU(maxp1, rows_maxp1, cols_maxp1, conv_params[0].out_channels, conv_params[1]);
+	float* conv2 = ConvBNReLU_gemm(maxp1, rows_maxp1, cols_maxp1, conv_params[0].out_channels, conv_params[1]);
 	delete[] maxp1;
 	int rows_conv2 = (rows_maxp1 - conv_params[1].kernel_size + 2 * conv_params[1].pad) / conv_params[1].stride + 1;
 	int cols_conv2 = (cols_maxp1 - conv_params[1].kernel_size + 2 * conv_params[1].pad) / conv_params[1].stride + 1;
@@ -244,7 +318,7 @@ float* cnn(float* img, int rows, int cols, int channels)
 	delete[] conv2;
 	int rows_maxp2 = rows_conv2 / 2;
 	int cols_maxp2 = cols_conv2 / 2;
-	float* conv3 = ConvBNReLU(maxp2, rows_maxp2, cols_maxp2, conv_params[1].out_channels, conv_params[2]);
+	float* conv3 = ConvBNReLU_gemm(maxp2, rows_maxp2, cols_maxp2, conv_params[1].out_channels, conv_params[2]);
 	delete[] maxp2;
 	int rows_conv3 = (rows_maxp2 - conv_params[2].kernel_size + 2 * conv_params[2].pad) / conv_params[2].stride + 1;
 	int cols_conv3 = (cols_maxp2 - conv_params[2].kernel_size + 2 * conv_params[2].pad) / conv_params[2].stride + 1;

@@ -9,12 +9,29 @@ using namespace chrono;
 
 int main()
 {
-	Mat m = imread("./pics/kid.jpg");
+	Mat m = imread("./pics/face.jpg");
 	Mat image;
 	m.convertTo(image, CV_32FC3);
-	float* img = convertRGB(image);
+	float* result = nullptr;
+	float* img = nullptr;
+	try
+	{
+		img = convertRGB(image);
+	}
+	catch (const char* e)
+	{
+		cout << e << endl;
+	}
 	auto start = std::chrono::steady_clock::now();
-	float* result = cnn(img, m.rows, m.cols, m.channels());
+	try
+	{
+		result = cnn(img, m.rows, m.cols, m.channels());
+	}
+	catch (const char* e)
+	{
+		cout << e << endl;
+		exit(0);
+	}
 	auto end = std::chrono::steady_clock::now();
 	printf("%s%.4f\n", "Confidence score of background: ", result[0]);
 	cout << "---------------------------------------" << endl;
