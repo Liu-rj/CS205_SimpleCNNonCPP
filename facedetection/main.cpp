@@ -9,7 +9,7 @@ using namespace chrono;
 
 int main()
 {
-	Mat m = imread("./pics/bg.jpg");
+	Mat m = imread("./pics/face.jpg");
 	Mat image;
 	m.convertTo(image, CV_32FC3);
 	float* result = nullptr;

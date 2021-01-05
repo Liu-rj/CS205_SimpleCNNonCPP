@@ -507,6 +507,18 @@ Here we test each picture in the same configuration and get their average of __7
 
 There are many other remarkable algorithm for speeding up cnn such as FFT and Winograd, but due to time limit, we are not going to talk about them now, maybe later in my spare time I will continue to add some.
 
+## ARM
+
+> This part provide the test on Raspberry Pi 4 Model B
+
+<div align="center">
+	<img src="./facedetection/pics/arm.png" width="60%">
+</div>
+
+On Raspberry Pi, First we test the image face.jpg, than bg.jpg which both can be found in __facedetection\pics___, it can be seen that these two pics both output the correct result. So the program is tested both on X86 and ARM and It can output the same results for the same inputs on the two platforms.
+
+__Also, from the time consuming aspect, here we use our second optimized version to test which on X86 takes 28 ms on average while on arm(Raspberry Pi) it takes 96 ms on average, nearly 3 times as that on x86. This is due to the lower RAM(4GB) than X86(8GB). However, on the other hand, it also indecates that this cnn model also has a good memory management!__
+
 ## Conclusions
 
 > If you are insterested in my work, fork me!
@@ -515,6 +527,7 @@ In this project we implement a simple cnn by cpp, made some optimization, and te
 
 |  method   | time cost |
 |  :----:  | :----:  |
+| im2col + simplegemm(ARM)  | 96 ms |
 | brutal_force  | 55 ms |
 | im2col + simplegemm  | 27 ms |
 | im2col + OpenBLAS  | 7 ms |
