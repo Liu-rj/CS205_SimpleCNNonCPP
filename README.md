@@ -1,3 +1,8 @@
+<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+<script type="text/x-mathjax-config">
+    MathJax.Hub.Config({ tex2jax: {inlineMath: [['$', '$']]}, messageStyle: "none" });
+</script>
+
 # CS205 C/ C++ Programming - SimpleCNNonCPP
 
 > This cnn model on cpp can detect whether the input image is a person
@@ -121,15 +126,12 @@ $$
 
 In this cnn model, $n=2$, means that we will get 2 output ranging from 0~1, representing probability of each type. Here $p_{1}$ represents for the confidence score of person while $p_{2}$ stands for the background.
 
-## Part 2 - Implementation
+## Part 2 - Implementation - Brutal Force
 
-> This part provide the basic implementation of cnn and some optimization algorithm to accelerate the speed.
-
-### Start with the Brutal Force
-
+> This part provide the basic implementation of cnn.
 > __Continous cache is considered in all steps in this Brutal Force model, although it's called "brutal", it's much faster than a real brutal force cnn because of continious memory access!__
 
-* #### Before CNN
+* ### Before CNN
 
 Before the first ConvBNReLU layer, we need to get the image information for our cnn model, here we use opencv to convert the input 3-channel-image to a 2D array ranging from 0~255 BGR through following operation:
 
@@ -139,34 +141,7 @@ Mat image;
 m.convertTo(image, CV_32FC3);
 ```
 
-Than we convert this 2D BGR array into a 1D-RGB-float-array ranging from 0~1 through following function:
-
-```c++
-float* convertRGB(Mat img)
-{
-	if (img.channels() != 3)
-	{
-		throw "Wrong Input Image Channel!";
-	}
-	else
-	{
-		float* convert = new float[img.rows * img.cols * img.channels()];
-		int size = img.rows * img.cols;
-		int index = -1;
-		for (int i = 0; i < img.rows; i++)
-		{
-			float* p = img.ptr<float>(i);
-			for (int j = 0; j < img.cols * img.channels(); j += 3)
-			{
-				convert[++index] = p[j + 2] / 255;
-				convert[index + size] = p[j + 1] / 255;
-				convert[index + 2 * size] = p[j] / 255;
-			}
-		}
-		return convert;
-	}
-}
-```
+Than we convert this 2D BGR array into a 1D-RGB-float-array ranging from 0~1 through function "convertRGB" wich can be found in __facedetetion\facedetection.cpp__.
 
 And we call this function surrounding with a try catch to prevent unexpected shutdown:
 
@@ -197,51 +172,14 @@ catch (const char* e)
 auto end = std::chrono::steady_clock::now();
 ```
 
-* #### ConvBNReLU Layer
+* ### ConvBNReLU Layer
 
-##### first we do the padding
+#### first we do the padding
+
+Implementation of padding can be found in __facedetection\facedetection.cpp__.
 
 ```c++
-// paddling operation
-float* paddling(float* img, int newrows, int newcols, int channels, int pad)
-{
-	if (pad > 0)
-	{
-		int size = newrows * newcols * channels;
-		float* result = new float[size];
-		int index = -1, imnd = -1;
-		for (int i = 0; i < channels; i++)
-		{
-			for (int j = 0; j < newcols * pad; j++)
-			{
-				result[++index] = 0;
-			}
-			for (int j = 0; j < newrows - 2 * pad; j++)
-			{
-				for (int k = 0; k < newcols; k++)
-				{
-					if (k < pad || (newcols - k) <= pad)
-					{
-						result[++index] = 0;
-					}
-					else
-					{
-						result[++index] = img[++imnd];
-					}
-				}
-			}
-			for (int j = 0; j < newcols * pad; j++)
-			{
-				result[++index] = 0;
-			}
-		}
-		return result;
-	}
-	else
-	{
-		return img;
-	}
-}
+float* convertRGB(Mat img);
 ```
 
 Rather than regurgitating, detailed explanation of padding operation has been mentioned above.
@@ -338,112 +276,41 @@ float* ConvBNReLU(float* img, int rows, int cols, int channels, conv_param& cp)
 }
 ```
 
-* #### MaxPool Layer
+* ### MaxPool Layer
+
+Implementation of MaxPool can be found in __facedetection\facedetection.cpp__.
 
 ```c++
-float* MaxPooling(float* img, int convrows, int convcols, int channels)
-{
-	int size = convcols * convrows;
-	float* maxp = new float[size * channels / 4];
-	int index = -1;
-	for (int i = 0; i < channels; i++)
-	{
-		int pos1 = i * size - 1;
-		int pos2 = pos1 + convcols;
-		for (int j = 0; j < convrows; j += 2)
-		{
-			for (int k = 0; k < convcols; k += 2)
-			{
-				maxp[++index] = max(max(max(img[++pos1], img[++pos1]), img[++pos2]), img[++pos2]);
-			}
-			pos1 = pos2;
-			pos2 = pos1 + convcols;
-		}
-	}
-	return maxp;
-}
+float* MaxPooling(float* img, int convrows, int convcols, int channels);
 ```
 
-* #### FullConnect Layer
+* ### FullConnect Layer
+
+Implementation of FullConnect can be found in __facedetection\facedetection.cpp__.
 
 ```c++
-float* FullConnect(float* img, int rows, int cols, int channels, fc_param& fc)
-{
-	if (fc.in_features != rows * cols * channels)
-	{
-		throw "Wrong Input Image Size!";
-	}
-	else
-	{
-		float* fcl = new float[fc.out_features]{};
-		int index_img = -1, index_fc = -1;
-		for (int i = 0; i < fc.out_features; i++)
-		{
-			for (int j = 0; j < fc.in_features; j++)
-			{
-				fcl[i] += img[++index_img] * fc.p_weight[++index_fc];
-			}
-			fcl[i] += fc.p_bias[i];
-			index_img = -1;
-		}
-		return fcl;
-	}
-}
+float* FullConnect(float* img, int rows, int cols, int channels, fc_param& fc);
 ```
 
-* #### SoftMax Layer
+* ### SoftMax Layer
 
-according to the formula given above, we translate it in to following codes:
+Implementation of SoftMax can be found in __facedetection\facedetection.cpp__.
 
 ```c++
-void SoftMax(float* fcl, int size)
-{
-	float sum = 0;
-	for (int i = 0; i < size; i++)
-	{
-		sum += exp(fcl[i]);
-	}
-	for (int i = 0; i < size; i++)
-	{
-		fcl[i] = exp(fcl[i]) / sum;
-	}
-}
+void SoftMax(float* fcl, int size);
 ```
 
-* #### a conpositive function provide for user input
+* ### a integrated function provide for user input
 
-In this function, any exception throwed by bottom implementation will be throwed to external user main function.
+In this function, any exception thrown by bottom implementation will be thrown to external user main function.
+
+Implementation of __cnn__ can be found in __facedetection\facedetection.cpp__.
 
 ```c++
-float* cnn(float* img, int rows, int cols, int channels)
-{
-	float* conv1 = ConvBNReLU_gemm(img, rows, cols, channels, conv_params[0]);
-	int rows_conv1 = (rows - conv_params[0].kernel_size + 2 * conv_params[0].pad) / conv_params[0].stride + 1;
-	int cols_conv1 = (cols - conv_params[0].kernel_size + 2 * conv_params[0].pad) / conv_params[0].stride + 1;
-	float* maxp1 = MaxPooling(conv1, rows_conv1, cols_conv1, conv_params[0].out_channels);
-	delete[] conv1;
-	int rows_maxp1 = rows_conv1 / 2;
-	int cols_maxp1 = cols_conv1 / 2;
-	float* conv2 = ConvBNReLU_gemm(maxp1, rows_maxp1, cols_maxp1, conv_params[0].out_channels, conv_params[1]);
-	delete[] maxp1;
-	int rows_conv2 = (rows_maxp1 - conv_params[1].kernel_size + 2 * conv_params[1].pad) / conv_params[1].stride + 1;
-	int cols_conv2 = (cols_maxp1 - conv_params[1].kernel_size + 2 * conv_params[1].pad) / conv_params[1].stride + 1;
-	float* maxp2 = MaxPooling(conv2, rows_conv2, cols_conv2, conv_params[1].out_channels);
-	delete[] conv2;
-	int rows_maxp2 = rows_conv2 / 2;
-	int cols_maxp2 = cols_conv2 / 2;
-	float* conv3 = ConvBNReLU_gemm(maxp2, rows_maxp2, cols_maxp2, conv_params[1].out_channels, conv_params[2]);
-	delete[] maxp2;
-	int rows_conv3 = (rows_maxp2 - conv_params[2].kernel_size + 2 * conv_params[2].pad) / conv_params[2].stride + 1;
-	int cols_conv3 = (cols_maxp2 - conv_params[2].kernel_size + 2 * conv_params[2].pad) / conv_params[2].stride + 1;
-	float* fc = FullConnect(conv3, rows_conv3, cols_conv3, conv_params[2].out_channels, fc_params[0]);
-	delete[] conv3;
-	SoftMax(fc, fc_params[0].out_features);
-	return fc;
-}
+float* cnn(float* img, int rows, int cols, int channels);
 ```
 
-* #### How we call this CNN?
+* ### How we call this CNN?
 
 Very simple! Just a 1D float array is needed to receive the data after a complete cnn! If any error occurs, it will also be caught for reminding!
 
@@ -458,4 +325,194 @@ catch (const char* e)
 	exit(0);
 }
 ```
+
+* ### Accuracy and efficiency Test
+
+![face](./facedetection/pics/facetest.png)
+
+![bg](./facedetection/pics/bgtest.png)
+
+Can be seen from the pics above, our cnn result meets our expetation.
+
+Here we test each picture in the same configuration and get their average of __55ms per pic__.
+
+## Optimization
+
+> There are many subtle and effecient optimization algorithms for accelerating cnn especially convolution and fullconnect layer including __im2col + GEMM(Image to Column + GEneral Matrix Mutiplication), FFT(Fast Fourier Transforms) and winograd(fast convolution)__. However, due to time limit, there are not enough time for us to try every algorithm, here we will just talk about im2col + GEMM __on the basis of our work in midterm project__.
+
+* ### The idea of im2col + GEMM
+
+The idea of im2col is to flatten our multichannel image into a 1D array by columns. Every row have one sliding window in every channel.
+
+So the size of feature matrix flattened from original input image can be discribed as:
+
+$$
+\left\{\begin{array}{l}
+\text {rows}=\text {height}_{\text {out}} * \text {width}_{\text {out}} \\
+\text {columns}=\text {kernelsize}*\text {kernelsize}* \text {channels}
+\end{array}\right. \tag{4}
+$$
+
+In the above formula, $\text {height}_{\text {out}}$ and $\text {width}_{\text {out}}$ can be found in $(1)$, $kernelsize$ represents for the side length of kernel, $channels$ represents for the channels of input array.
+
+Following will further demonstrate on how im2col works:
+
+<div align="center">
+	<img src="./facedetection/pics/im2col.jpg" width="50%">
+</div>
+
+
+Then we just need to do GEMM between feature matrix and filter matrix. __Notice that before doing matrix multiplication, we need to transpose filter matrix since it's originally stored by plane rather than by channel__.
+
+__Also, after GEMM, the output marix is store by out_channel of fliter matrix ranther than plane by plane. That is to say, we also need to do a transpose to output matrix.
+
+My source code of implementing im2col + GEMM is atteched below:
+
+* im2col:
+
+```c++
+// im2col algorithm flatten by channel RGBRGBRGB
+float* im2col_channel(float* newimg, int newrows, int newcols, int convrows, int convcols, int channels, int kernel_size, int stride)
+{
+	int newsize = newrows * newcols;
+	float* result = new float[kernel_size * kernel_size * convrows * convcols * channels];
+	int index = -1, position = -1;
+	for (int i = 0; i < convrows; i++)
+	{
+		for (int j = 0; j < convcols; j++)
+		{
+			int colp = position + j * stride; // column initial position
+			for (int g = 0; g < channels; g++)
+			{
+				int kp = colp + g * newsize;
+				for (int k = 0; k < kernel_size; k++) // rows
+				{
+					for (int l = 0; l < kernel_size; l++) // cols
+					{
+						result[++index] = newimg[++kp];
+					}
+					kp += newcols - kernel_size; // column position
+				}
+			}
+		}
+		position += newcols * stride; // rows position
+	}
+	return result;
+}
+```
+
+* conv:
+
+```c++
+// convolution & BN & Relu
+float* ConvBNReLU_gemm(float* img, int rows, int cols, int channels, conv_param& cp)
+{
+	...
+	float* imgcol = im2col_channel(newimg, rows + 2 * cp.pad, cols + 2 * cp.pad, convrows, convcols, channels, cp.kernel_size, cp.stride);
+	delete[] newimg;
+	float* convtemp = new float[kerneltimes * cp.out_channels]{}; // size after convolution 64 * 64 * 16
+	float* conv = new float[kerneltimes * cp.out_channels]{};
+	float* rvkernel = new float[kernelsize * cp.out_channels * cp.in_channels]; // transposition of kernel
+
+	transpose(rvkernel, cp.p_weight, cp.out_channels, kernelsize * cp.in_channels);
+	m_product_row(convtemp, imgcol, rvkernel, kerneltimes, channels * kernelsize, cp.out_channels);
+	//cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, kerneltimes, cp.out_channels, channels * kernelsize, 1, imgcol, channels * kernelsize, rvkernel, cp.out_channels, 0, convtemp, cp.out_channels);
+	
+	transpose(conv, convtemp, kerneltimes, cp.out_channels);
+
+	// Relu
+	int index = -1;
+	for (int i = 0; i < cp.out_channels; ++i)
+	{
+		for (int j = 0; j < kerneltimes; ++j)
+		{
+			conv[++index] += cp.p_bias[i];
+			if (conv[index] < 0)
+			{
+				conv[index] = 0;
+			}
+		}
+	}
+
+	delete[] imgcol;
+	delete[] rvkernel;
+	delete[] convtemp;
+	return conv;
+}
+```
+
+* a simple gemm computing by row(__continuous ache, simple but efficient!__):
+
+```c++
+void m_product_row(float* c, const float* a, const float* b, int row1, int column1, int column2) {
+    int apos = 0;
+    int bpos;
+    int cpos = 0;
+    for (int i = 0; i < row1; ++i) {
+        bpos = 0;
+        for (int j = 0; j < column1; ++j) {
+            for (int k = 0; k < column2; ++k) {
+                c[cpos++] += a[apos] * b[bpos++];
+            }
+            apos++;
+            cpos -= column2;
+        }
+        cpos += column2;
+    }
+}
+```
+
+* Also, my transpose funtion:
+
+```c++
+void transpose(float* b, const float* a, int row, int column)
+{
+    int apos;
+    int bpos = -1;
+    int num = 0;
+    for (int i = 0; i < column; i++)
+    {
+        apos = i;
+        for (int j = 0; j < row; j++)
+        {
+            b[++bpos] = a[apos];
+            apos += column;
+        }
+    }
+}
+```
+
+#### Test with first version of im2col + GEMM
+
+![face](./facedetection/pics/facetestgemm.png)
+
+![bg](./facedetection/pics/bgtestgemm.png)
+
+Can be seen from the pics above, our cnn result meets our expetation.
+
+Here we test each picture in the same configuration and get their average of __28ms per pic__. Efficiency nearly __doubled__!
+
+__Since GEMM optimization has been implemented in midterm project, so here we are not going deep, we will just use OpenBLAS to get the best efficiency__.
+
+* ### Test with OpenBLAS
+
+```c++
+cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, kerneltimes, cp.out_channels, channels * kernelsize, 1, imgcol, channels * kernelsize, rvkernel, cp.out_channels, 0, convtemp, cp.out_channels);
+```
+
+![face](./facedetection/pics/facetestopenblas.png)
+
+![bg](./facedetection/pics/bgtestopenblas.png)
+
+Can be seen from the pics above, our cnn result meets our expetation.
+
+Here we test each picture in the same configuration and get their average of __7ms per pic__. Speed up by nearly __eight times__ than original brutal force!
+
+* ### Conclusion
+
+There are many other remarkable algorithm for speeding up cnn such as FFT and Winograd, but due to time limit, we are not going to talk about them now, maybe later in my spare time I will continue to add some.
+
+## ARM
+
+> This part provide arm test on Raspberry Pi
 
