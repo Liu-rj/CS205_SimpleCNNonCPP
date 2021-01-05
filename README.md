@@ -516,3 +516,17 @@ There are many other remarkable algorithm for speeding up cnn such as FFT and Wi
 
 > This part provide arm test on Raspberry Pi
 
+## Conclusions
+
+> If you are insterested in my work, fork me!
+
+In this project we implement a simple cnn by cpp, made some optimization, and test them on efficiency.
+
+|  method   | time cost |
+|  :----:  | :----:  |
+| brutal_force  | 55 ms |
+| im2col + simplegemm  | 27 ms |
+| im2col + OpenBLAS  | 7 ms |
+
+The above is the all of this report. Although this is just an assignment, it will continue to be expanded and optimized in the future, hoping to become a gradually mature cnn model.
+__Thanks for watching!__
