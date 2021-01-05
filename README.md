@@ -1,8 +1,3 @@
-<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-<script type="text/x-mathjax-config">
-    MathJax.Hub.Config({ tex2jax: {inlineMath: [['$', '$']]}, messageStyle: "none" });
-</script>
-
 # CS205 C/ C++ Programming - SimpleCNNonCPP
 
 > This cnn model on cpp can detect whether the input image is a person
@@ -511,10 +506,6 @@ Here we test each picture in the same configuration and get their average of __7
 * ### Conclusion
 
 There are many other remarkable algorithm for speeding up cnn such as FFT and Winograd, but due to time limit, we are not going to talk about them now, maybe later in my spare time I will continue to add some.
-
-## ARM
-
-> This part provide arm test on Raspberry Pi
 
 ## Conclusions
 
